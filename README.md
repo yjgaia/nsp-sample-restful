@@ -1,1 +1,1 @@
-# nsp-sample-restful
+# nsp-sample-api
