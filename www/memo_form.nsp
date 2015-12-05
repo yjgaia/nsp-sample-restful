@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html>
+	<body>
+		<h1>새 메모 작성</h1>
+		<form action="memo" method="POST">
+			<div>
+				<h3>작성자</h3>
+				<input type="text" name="name">
+			</div>
+			<div>
+				<h3>내용</h3>
+				<textarea name="content"></textarea>
+			</div>
+			<input type="submit" value="Submit">
+		</form>
+		<a href="/">Home</a>
+	</body>
+</html>

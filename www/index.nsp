@@ -10,5 +10,8 @@
 		<p>
 			
 		</p>
+		<ul>
+			<li><a href="memo/new">새 메모</a></li>
+		</ul>
 	</body>
 </html>
