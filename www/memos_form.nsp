@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+	<body>
+		<%
+			var data = CHECK_IS_EMPTY_DATA(self.data) === true ? {
+				name : '',
+				content : ''
+			} : self.data;
+		%>
+		<h1>새 메모 작성</h1>
+		<form action="/memos<? CHECK_IS_EMPTY_DATA(self.data) !== true>/{{data._id.toString()}}</?>" method="POST">
+			<div>
+				<h3>작성자</h3>
+				<input type="text" name="name" value="{{data.name}}">
+			</div>
+			<div>
+				<h3>내용</h3>
+				<textarea name="content">{{data.content}}</textarea>
+			</div>
+			<? CHECK_IS_EMPTY_DATA(self.data) !== true>
+				<input type="hidden" name="_method" value="PUT">
+			</?>
+			<input type="submit" value="Submit">
+		</form>
+		<a href="/">Home</a>
+	</body>
+</html>

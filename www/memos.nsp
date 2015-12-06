@@ -1,0 +1,97 @@
+<%
+	var ObjectID = require('mongodb').ObjectID;
+	
+	var id = self.subURI;
+	var data = COPY(self.params);
+	delete data._method;
+	
+	var order = self.subURI.substring(self.subURI.lastIndexOf('/') + 1);	
+	if (order === 'edit') {
+		id = self.subURI.substring(0, self.subURI.lastIndexOf('/'));
+	} else if (id === 'new') {
+		order = id;
+		id = '';
+	}
+	
+	require('mongodb').MongoClient.connect('mongodb://localhost:27017/nsp-sample-restful', function(error, db) {
+	
+		var collection = db.collection('memos');
+		
+		// 메모 수정
+		if (self.method === 'PUT' || (self.method === 'POST' && self.params._method === 'PUT')) {
+			collection.updateOne({
+				_id : ObjectID(id)
+			}, {
+				$set : data
+			}, function(error) {
+				if (error === null) {
+					data._id = id;
+					resume();
+				}
+			});
+		}
+		
+		// 메모 삭제
+		else if (self.method === 'DELETE' || (self.method === 'POST' && self.params._method === 'DELETE')) {
+			collection.deleteOne({
+				_id : ObjectID(id)
+			}, function(error, result) {
+				if (error === null) {
+					data = '';
+					resume();
+				}
+			});
+		}
+		
+		// 메모 생성
+		else if (self.method === 'POST') {
+			collection.insertOne(data, function(error, result) {
+				if (error === null) {
+					data = result.ops[0];
+					resume();
+				}
+			});
+		}
+		
+		else if (order !== 'new') {
+			
+			// 메모 목록 가져오기
+			if (id === '') {
+				collection.find().toArray(function(error, dataSet) {
+					if (error === null) {
+						data = dataSet;
+						resume();
+					}
+				});
+			}
+			
+			// 메모 단일 가져오기
+			else {
+				collection.findOne({
+					_id : ObjectID(id)
+				}, function(error, _data) {
+					if (error === null) {
+						data = _data;
+						resume();
+					}
+				});
+			}
+		}
+		
+		else {
+			resume();
+		}
+	});
+	
+	pause();
+%>
+<? order === 'new' || order === 'edit'>
+<%
+	self.data = data;
+	include('memos_form.nsp');
+%>
+</?>
+
+<? else>
+{{data}}
+</?>
