@@ -26,12 +26,12 @@
 				pause();
 			%>
 			<~ dataSet -> data>
-				<li><a href="/memos/{{data._id.toString()}}">memos/{{data._id.toString()}}</a></li>
-				<li><a href="/memos/{{data._id.toString()}}/edit">memos/{{data._id.toString()}}/edit</a></li>
+				<li><a href="/memos/{{data._id}}">memos/{{data._id}}</a></li>
+				<li><a href="/memos/{{data._id}}/edit">memos/{{data._id}}/edit</a></li>
 				<li>
-					<form action="/memos/{{data._id.toString()}}" method="POST">
+					<form action="/memos/{{data._id}}" method="POST">
 						<input type="hidden" name="_method" value="DELETE">
-						<input type="submit" value="delete memo {{data._id.toString()}}">
+						<input type="submit" value="delete memo {{data._id}}">
 					</form>
 				</li>
 			</~>

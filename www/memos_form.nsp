@@ -2,13 +2,10 @@
 <html>
 	<body>
 		<%
-			var data = CHECK_IS_EMPTY_DATA(self.data) === true ? {
-				name : '',
-				content : ''
-			} : self.data;
+			var data = self.data;
 		%>
 		<h1>새 메모 작성</h1>
-		<form action="/memos<? CHECK_IS_EMPTY_DATA(self.data) !== true>/{{data._id.toString()}}</?>" method="POST">
+		<form action="/memos<? CHECK_IS_EMPTY_DATA(self.data) !== true>/{{data._id}}</?>" method="POST">
 			<div>
 				<h3>작성자</h3>
 				<input type="text" name="name" value="{{data.name}}">
@@ -22,6 +19,6 @@
 			</?>
 			<input type="submit" value="Submit">
 		</form>
-		<a href="/">Home</a>
+		<a href="index">Home</a>
 	</body>
 </html>
