@@ -86,10 +86,7 @@
 	pause();
 %>
 <? order === 'new' || order === 'edit'>
-<%
-	self.data = data;
-	include('memos_form.nsp');
-%>
+<% include('memos_form.nsp'); %>
 </?>
 
 <? else>
