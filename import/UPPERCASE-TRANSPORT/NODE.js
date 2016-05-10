@@ -404,6 +404,9 @@ global.WEB_SOCKET_FIX_REQUEST_MANAGER = CLASS(function(cls) {
 				// method map
 				methodMap,
 				
+				// client info
+				clientInfo,
+				
 				// on.
 				on,
 
@@ -451,10 +454,13 @@ global.WEB_SOCKET_FIX_REQUEST_MANAGER = CLASS(function(cls) {
 					connectionListener(
 
 					// client info
-					{
+					clientInfo = {
+						
 						ip : requestInfo.ip,
 
-						headers : requestInfo.headers
+						headers : requestInfo.headers,
+						
+						connectTime : new Date()
 					},
 
 					// on.
@@ -501,7 +507,7 @@ global.WEB_SOCKET_FIX_REQUEST_MANAGER = CLASS(function(cls) {
 					function(params, callback) {
 						//REQUIRED: params
 						//REQUIRED: params.methodName
-						//REQUIRED: params.data
+						//OPTIONAL: params.data
 						//OPTIONAL: callback
 
 						var
@@ -530,6 +536,8 @@ global.WEB_SOCKET_FIX_REQUEST_MANAGER = CLASS(function(cls) {
 						}
 		
 						sendKey += 1;
+						
+						clientInfo.lastReceiveTime = new Date();
 					},
 
 					// disconnect.
@@ -671,36 +679,17 @@ global.WEB_SOCKET_FIX_REQUEST_MANAGER = CLASS(function(cls) {
  */
 global.WEB_SOCKET_SERVER = METHOD({
 
-	run : function(portOrWebServer, connectionListener) {
+	run : function(webServer, connectionListener) {
 		'use strict';
-		//REQUIRED: portOrWebServer
+		//REQUIRED: webServer
 		//REQUIRED: connectionListener
 
 		var
 		//IMPORT: WebSocketServer
 		WebSocketServer = require('ws').Server,
-
-		// port
-		port,
-
-		// web server
-		webServer,
-
-		// server
-		server;
-
-		if (CHECK_IS_DATA(portOrWebServer) !== true) {
-			port = portOrWebServer;
-		} else {
-			webServer = portOrWebServer;
-		}
-
-		server = new WebSocketServer({
-			port : port,
-			server : webServer === undefined ? undefined : webServer.getNativeHTTPServer()
-		});
-
-		server.on('connection', function(conn) {
+		
+		// native connection listener.
+		nativeConnectionListener = function(conn) {
 
 			var
 			// headers
@@ -711,6 +700,9 @@ global.WEB_SOCKET_SERVER = METHOD({
 
 			// send key
 			sendKey = 0,
+			
+			// client info
+			clientInfo,
 
 			// ip
 			ip,
@@ -805,10 +797,13 @@ global.WEB_SOCKET_SERVER = METHOD({
 			connectionListener(
 
 			// client info
-			{
+			clientInfo = {
+				
 				ip : ip,
 
-				headers : headers
+				headers : headers,
+				
+				connectTime : new Date()
 			},
 
 			// on.
@@ -890,14 +885,30 @@ global.WEB_SOCKET_SERVER = METHOD({
 				}
 
 				sendKey += 1;
+				
+				clientInfo.lastReceiveTime = new Date();
 			},
 
 			// disconnect.
 			function() {
 				conn.close();
 			});
-		});
+		};
+		
+		if (webServer.getNativeHTTPServer() !== undefined) {
+		
+			new WebSocketServer({
+				server : webServer.getNativeHTTPServer()
+			}).on('connection', nativeConnectionListener);
+		}
+		
+		if (webServer.getNativeHTTPSServer() !== undefined) {
+		
+			new WebSocketServer({
+				server : webServer.getNativeHTTPSServer()
+			}).on('connection', nativeConnectionListener);
+		}
 
-		console.log('[UPPERCASE-WEB_SOCKET_SERVER] RUNNING WEB SOCKET SERVER...' + (port === undefined ? '' : ' (PORT:' + port + ')'));
+		console.log('[UPPERCASE-WEB_SOCKET_SERVER] RUNNING WEB SOCKET SERVER...');
 	}
 });

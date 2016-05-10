@@ -1141,16 +1141,13 @@ global.VALID = CLASS(function(cls) {
 		max = params.max,
 
 		// string
-		str = String(params.value),
-
-		// length
-		length = str.length;
-
+		str = String(params.value);
+		
 		if (min === undefined) {
 			min = 0;
 		}
 
-		return min <= length && (max === undefined || length <= max);
+		return min <= str.trim().length && (max === undefined || str.length <= max);
 	};
 
 	cls.integer = integer = function(value) {
@@ -1789,7 +1786,8 @@ global.CHECK_IS_ARRAY = METHOD({
  */
 global.CHECK_IS_DATA = METHOD({
 
-	run : function(it) {'use strict';
+	run : function(it) {
+		'use strict';
 		//OPTIONAL: it
 
 		if (it !== undefined && it !== TO_DELETE && CHECK_IS_ARGUMENTS(it) !== true && CHECK_IS_ARRAY(it) !== true && it instanceof Date !== true && it instanceof RegExp !== true && typeof it === 'object') {
@@ -1810,6 +1808,27 @@ global.CHECK_IS_EMPTY_DATA = METHOD({
 		//REQUIRED: data
 
 		return CHECK_ARE_SAME([data, {}]);
+	}
+});
+
+/**
+ * count data's properties
+ */
+global.COUNT_PROPERTIES = METHOD({
+
+	run : function(data) {
+		'use strict';
+		//OPTIONAL: data
+
+		var
+		// count
+		count = 0;
+		
+		EACH(data, function() {
+			count += 1;
+		});
+		
+		return count;
 	}
 });
 
@@ -2611,9 +2630,24 @@ global.DELAY = CLASS({
 		//OPTIONAL: func
 
 		var
+		// milliseconds
+		milliseconds,
+		
+		// start time
+		startTime = Date.now(),
+		
+		// remaining
+		remaining,
+		
 		// timeout
 		timeout,
 
+		// resume.
+		resume,
+		
+		// pause.
+		pause,
+		
 		// remove.
 		remove;
 
@@ -2621,13 +2655,29 @@ global.DELAY = CLASS({
 			func = seconds;
 			seconds = 0;
 		}
-
-		timeout = setTimeout(function() {
-			func(self);
-		}, seconds * 1000);
-
-		self.remove = remove = function() {
+		
+		remaining = milliseconds = seconds * 1000;
+		
+		self.resume = resume = RAR(function() {
+			
+			if (timeout === undefined) {
+				
+				timeout = setTimeout(function() {
+					func(self);
+				}, remaining);
+			}
+		});
+		
+		self.pause = pause = function() {
+			
+			remaining = milliseconds - (Date.now() - startTime);
+			
 			clearTimeout(timeout);
+			timeout = undefined;
+		};
+		
+		self.remove = remove = function() {
+			pause();
 		};
 	}
 });
@@ -2643,8 +2693,23 @@ global.INTERVAL = CLASS({
 		//OPTIONAL: func
 
 		var
+		// milliseconds
+		milliseconds,
+		
+		// start time
+		startTime = Date.now(),
+		
+		// remaining
+		remaining,
+		
 		// interval
 		interval,
+		
+		// resume.
+		resume,
+		
+		// pause.
+		pause,
 
 		// remove.
 		remove;
@@ -2653,15 +2718,35 @@ global.INTERVAL = CLASS({
 			func = seconds;
 			seconds = 0;
 		}
-
-		interval = setInterval(function() {
-			if (func(self) === false) {
-				remove();
+		
+		remaining = milliseconds = seconds === 0 ? 1 : seconds * 1000;
+		
+		self.resume = resume = RAR(function() {
+			
+			if (interval === undefined) {
+				
+				interval = setInterval(function() {
+					
+					if (func(self) === false) {
+						remove();
+					}
+					
+					startTime = Date.now();
+					
+				}, remaining);
 			}
-		}, seconds === 0 ? 1 : seconds * 1000);
-
-		self.remove = remove = function() {
+		});
+		
+		self.pause = pause = function() {
+			
+			remaining = milliseconds - (Date.now() - startTime);
+			
 			clearInterval(interval);
+			interval = undefined;
+		};
+		
+		self.remove = remove = function() {
+			pause();
 		};
 	}
 });
@@ -2737,7 +2822,7 @@ global.LOOP = CLASS(function(cls) {
 							// run interval.
 							interval = loopInfo.interval;
 							for ( j = 0; j < count; j += 1) {
-								interval();
+								interval(loopInfo.fps);
 							}
 
 							// end.
@@ -2799,6 +2884,12 @@ global.LOOP = CLASS(function(cls) {
 
 			// info
 			info,
+			
+			// resume.
+			resume,
+			
+			// pause.
+			pause,
 
 			// change fps.
 			changeFPS,
@@ -2817,21 +2908,20 @@ global.LOOP = CLASS(function(cls) {
 					interval = intervalOrFuncs.interval;
 					end = intervalOrFuncs.end;
 				}
-
-				loopInfos.push( info = {
-					fps : fps,
-					start : start,
-					interval : interval,
-					end : end
+			
+				self.resume = resume = RAR(function() {
+					
+					loopInfos.push( info = {
+						fps : fps,
+						start : start,
+						interval : interval,
+						end : end
+					});
+					
+					fire();
 				});
 
-				self.changeFPS = changeFPS = function(fps) {
-					//REQUIRED: fps
-
-					info.fps = fps;
-				};
-
-				self.remove = remove = function() {
+				self.pause = pause = function() {
 
 					REMOVE({
 						array : loopInfos,
@@ -2840,14 +2930,29 @@ global.LOOP = CLASS(function(cls) {
 
 					stop();
 				};
+
+				self.changeFPS = changeFPS = function(fps) {
+					//REQUIRED: fps
+
+					info.fps = fps;
+				};
+
+				self.remove = remove = function() {
+					pause();
+				};
 			}
 
 			// when fps is run
 			else {
+				
+				self.resume = resume = RAR(function() {
+					
+					runs.push( run = fps);
+					
+					fire();
+				});
 
-				runs.push( run = fps);
-
-				self.remove = remove = function() {
+				self.pause = pause = function() {
 
 					REMOVE({
 						array : runs,
@@ -2856,9 +2961,11 @@ global.LOOP = CLASS(function(cls) {
 
 					stop();
 				};
-			}
 
-			fire();
+				self.remove = remove = function() {
+					pause();
+				};
+			}
 		}
 	};
 });
@@ -3224,7 +3331,7 @@ global.CPU_CLUSTERING = METHOD(function(m) {
 	cluster = require('cluster'),
 
 	// worker id
-	workerId,
+	workerId = 1,
 
 	// get worker id.
 	getWorkerId;
@@ -3343,11 +3450,17 @@ global.CPU_CLUSTERING = METHOD(function(m) {
 					// remove shared value.
 					on('__SHARED_STORE_REMOVE', SHARED_STORE.remove);
 
+					// clear shared store.
+					on('__SHARED_STORE_CLEAR', SHARED_STORE.clear);
+
 					// save cpu shared value.
 					on('__CPU_SHARED_STORE_SAVE', CPU_SHARED_STORE.save);
 
 					// remove cpu shared value.
 					on('__CPU_SHARED_STORE_REMOVE', CPU_SHARED_STORE.remove);
+
+					// clear cpu shared store.
+					on('__CPU_SHARED_STORE_CLEAR', CPU_SHARED_STORE.clear);
 
 					// save shared data.
 					on('__SHARED_DB_SAVE', SHARED_DB.save);
@@ -3358,6 +3471,9 @@ global.CPU_CLUSTERING = METHOD(function(m) {
 					// remove shared data.
 					on('__SHARED_DB_REMOVE', SHARED_DB.remove);
 
+					// clear shared db.
+					on('__SHARED_DB_CLEAR', SHARED_DB.clear);
+
 					// save cpu shared data.
 					on('__CPU_SHARED_DB_SAVE', CPU_SHARED_DB.save);
 					
@@ -3366,6 +3482,9 @@ global.CPU_CLUSTERING = METHOD(function(m) {
 
 					// remove cpu shared data.
 					on('__CPU_SHARED_DB_REMOVE', CPU_SHARED_DB.remove);
+
+					// clear cpu shared db.
+					on('__CPU_SHARED_DB_CLEAR', CPU_SHARED_DB.clear);
 
 					m.off = off = function(methodName) {
 						delete methodMap[methodName];
@@ -3409,12 +3528,18 @@ global.CPU_SHARED_DB = CLASS(function(cls) {
 
 	// get.
 	get,
+
+	// remove.
+	remove,
 	
 	// list.
 	list,
-
-	// remove.
-	remove;
+	
+	// count.
+	count,
+	
+	// clear.
+	clear;
 
 	cls.save = save = function(params, remove) {
 		//REQUIRED: params
@@ -3639,16 +3764,6 @@ global.CPU_SHARED_DB = CLASS(function(cls) {
 			return storage[id];
 		}
 	};
-	
-	cls.list = list = function(dbName) {
-		//REQUIRED: dbName
-		
-		var
-		// storage
-		storage = storages[dbName];
-		
-		return storage === undefined ? {} : storage;
-	};
 
 	cls.remove = remove = function(params) {
 		//REQUIRED: params
@@ -3677,6 +3792,28 @@ global.CPU_SHARED_DB = CLASS(function(cls) {
 			delete removeDelays[id];
 		}
 	};
+	
+	cls.list = list = function(dbName) {
+		//REQUIRED: dbName
+		
+		var
+		// storage
+		storage = storages[dbName];
+		
+		return storage === undefined ? {} : storage;
+	};
+	
+	cls.count = count = function(dbName) {
+		//REQUIRED: dbName
+		
+		return COUNT_PROPERTIES(list(dbName));
+	};
+	
+	cls.clear = clear = function(dbName) {
+		//REQUIRED: dbName
+		
+		delete storages[dbName];
+	};
 
 	return {
 
@@ -3690,11 +3827,20 @@ global.CPU_SHARED_DB = CLASS(function(cls) {
 			// update.
 			update,
 			
-			// list.
-			list,
+			// get.
+			get,
 
 			// remove.
-			remove;
+			remove,
+			
+			// list.
+			list,
+			
+			// count.
+			count,
+			
+			// clear.
+			clear;
 
 			self.save = save = function(params) {
 				//REQUIRED: params
@@ -3778,15 +3924,11 @@ global.CPU_SHARED_DB = CLASS(function(cls) {
 
 			self.get = get = function(id) {
 				//REQUIRED: id
-
+				
 				return cls.get({
 					dbName : dbName,
 					id : id
 				});
-			};
-			
-			self.list = list = function() {
-				return cls.list(dbName);
 			};
 
 			self.remove = remove = function(id) {
@@ -3805,6 +3947,27 @@ global.CPU_SHARED_DB = CLASS(function(cls) {
 							dbName : dbName,
 							id : id
 						}
+					});
+				}
+			};
+			
+			self.list = list = function() {
+				return cls.list(dbName);
+			};
+			
+			self.count = count = function() {
+				return cls.count(dbName);
+			};
+			
+			self.clear = clear = function() {
+				
+				cls.clear(dbName);
+
+				if (CPU_CLUSTERING.broadcast !== undefined) {
+
+					CPU_CLUSTERING.broadcast({
+						methodName : '__CPU_SHARED_DB_CLEAR',
+						data : dbName
 					});
 				}
 			};
@@ -3832,22 +3995,32 @@ FOR_BOX(function(box) {
 
 			// get.
 			get,
+
+			// remove.
+			remove,
 			
 			// list.
 			list,
-
-			// remove.
-			remove;
+			
+			// count.
+			count,
+			
+			// clear.
+			clear;
 
 			self.save = save = sharedDB.save;
 
 			self.update = update = sharedDB.update;
 
 			self.get = get = sharedDB.get;
+
+			self.remove = remove = sharedDB.remove;
 			
 			self.list = list = sharedDB.list;
 
-			self.remove = remove = sharedDB.remove;
+			self.count = count = sharedDB.count;
+
+			self.clear = clear = sharedDB.clear;
 		}
 	});
 });
@@ -3870,12 +4043,18 @@ global.CPU_SHARED_STORE = CLASS(function(cls) {
 
 	// get.
 	get,
+
+	// remove.
+	remove,
 	
 	// list.
 	list,
-
-	// remove.
-	remove;
+	
+	// count.
+	count,
+	
+	// clear.
+	clear;
 
 	cls.save = save = function(params, remove) {
 		//REQUIRED: params
@@ -3943,16 +4122,6 @@ global.CPU_SHARED_STORE = CLASS(function(cls) {
 			return storage[name];
 		}
 	};
-	
-	cls.list = list = function(storeName) {
-		//REQUIRED: storeName
-		
-		var
-		// storage
-		storage = storages[storeName];
-		
-		return storage === undefined ? {} : storage;
-	};
 
 	cls.remove = remove = function(params) {
 		//REQUIRED: params
@@ -3981,6 +4150,28 @@ global.CPU_SHARED_STORE = CLASS(function(cls) {
 			delete removeDelays[name];
 		}
 	};
+	
+	cls.list = list = function(storeName) {
+		//REQUIRED: storeName
+		
+		var
+		// storage
+		storage = storages[storeName];
+		
+		return storage === undefined ? {} : storage;
+	};
+	
+	cls.count = count = function(dbName) {
+		//REQUIRED: dbName
+		
+		return COUNT_PROPERTIES(list(dbName));
+	};
+	
+	cls.clear = clear = function(storeName) {
+		//REQUIRED: storeName
+		
+		delete storages[storeName];
+	};
 
 	return {
 
@@ -3993,12 +4184,18 @@ global.CPU_SHARED_STORE = CLASS(function(cls) {
 
 			// get.
 			get,
+
+			// remove.
+			remove,
 			
 			// list.
 			list,
-
-			// remove.
-			remove;
+			
+			// count.
+			count,
+			
+			// clear.
+			clear;
 
 			self.save = save = function(params) {
 				//REQUIRED: params
@@ -4040,15 +4237,11 @@ global.CPU_SHARED_STORE = CLASS(function(cls) {
 
 			self.get = get = function(name) {
 				//REQUIRED: name
-
+				
 				return cls.get({
 					storeName : storeName,
 					name : name
 				});
-			};
-			
-			self.list = list = function() {
-				return cls.list(storeName);
 			};
 
 			self.remove = remove = function(name) {
@@ -4067,6 +4260,27 @@ global.CPU_SHARED_STORE = CLASS(function(cls) {
 							storeName : storeName,
 							name : name
 						}
+					});
+				}
+			};
+			
+			self.list = list = function() {
+				return cls.list(storeName);
+			};
+			
+			self.count = count = function() {
+				return cls.count(storeName);
+			};
+
+			self.clear = clear = function() {
+
+				cls.clear(storeName);
+
+				if (CPU_CLUSTERING.broadcast !== undefined) {
+
+					CPU_CLUSTERING.broadcast({
+						methodName : '__CPU_SHARED_STORE_CLEAR',
+						data : storeName
 					});
 				}
 			};
@@ -4091,20 +4305,30 @@ FOR_BOX(function(box) {
 
 			// get.
 			get,
+
+			// remove.
+			remove,
 			
 			// list.
 			list,
-
-			// remove.
-			remove;
+			
+			// count.
+			count,
+			
+			// clear.
+			clear;
 
 			self.save = save = sharedStore.save;
 
 			self.get = get = sharedStore.get;
-			
-			self.list = list = sharedStore.list;
 
 			self.remove = remove = sharedStore.remove;
+			
+			self.list = list = sharedStore.list;
+			
+			self.count = count = sharedStore.count;
+			
+			self.clear = clear = sharedStore.clear;
 		}
 	});
 });
@@ -4293,6 +4517,20 @@ global.SERVER_CLUSTERING = METHOD(function(m) {
 				}
 			});
 
+			// clear shared store.
+			on('__SHARED_STORE_CLEAR', function(storeName) {
+
+				SHARED_STORE.clear(storeName);
+
+				if (CPU_CLUSTERING.broadcast !== undefined) {
+
+					CPU_CLUSTERING.broadcast({
+						methodName : '__SHARED_STORE_CLEAR',
+						data : storeName
+					});
+				}
+			});
+
 			// save shared data.
 			on('__SHARED_DB_SAVE', function(params) {
 
@@ -4331,6 +4569,20 @@ global.SERVER_CLUSTERING = METHOD(function(m) {
 					CPU_CLUSTERING.broadcast({
 						methodName : '__SHARED_DB_REMOVE',
 						data : params
+					});
+				}
+			});
+
+			// clear shared db.
+			on('__SHARED_DB_CLEAR', function(dbName) {
+
+				SHARED_DB.clear(dbName);
+
+				if (CPU_CLUSTERING.broadcast !== undefined) {
+
+					CPU_CLUSTERING.broadcast({
+						methodName : '__SHARED_DB_CLEAR',
+						data : dbName
 					});
 				}
 			});
@@ -4379,12 +4631,18 @@ global.SHARED_DB = CLASS(function(cls) {
 
 	// get.
 	get,
+
+	// remove.
+	remove,
 	
 	// list.
 	list,
-
-	// remove.
-	remove;
+	
+	// count.
+	count,
+	
+	// clear.
+	clear;
 
 	cls.save = save = function(params, remove) {
 		//REQUIRED: params
@@ -4609,16 +4867,6 @@ global.SHARED_DB = CLASS(function(cls) {
 			return storage[id];
 		}
 	};
-	
-	cls.list = list = function(dbName) {
-		//REQUIRED: dbName
-		
-		var
-		// storage
-		storage = storages[dbName];
-		
-		return storage === undefined ? {} : storage;
-	};
 
 	cls.remove = remove = function(params) {
 		//REQUIRED: params
@@ -4647,6 +4895,28 @@ global.SHARED_DB = CLASS(function(cls) {
 			delete removeDelays[id];
 		}
 	};
+	
+	cls.list = list = function(dbName) {
+		//REQUIRED: dbName
+		
+		var
+		// storage
+		storage = storages[dbName];
+		
+		return storage === undefined ? {} : storage;
+	};
+	
+	cls.count = count = function(dbName) {
+		//REQUIRED: dbName
+		
+		return COUNT_PROPERTIES(list(dbName));
+	};
+	
+	cls.clear = clear = function(dbName) {
+		//REQUIRED: dbName
+		
+		delete storages[dbName];
+	};
 
 	return {
 
@@ -4662,12 +4932,18 @@ global.SHARED_DB = CLASS(function(cls) {
 
 			// get.
 			get,
+
+			// remove.
+			remove,
 			
 			// list.
 			list,
-
-			// remove.
-			remove;
+			
+			// count.
+			count,
+			
+			// clear.
+			clear;
 
 			self.save = save = function(params) {
 				//REQUIRED: params
@@ -4775,15 +5051,11 @@ global.SHARED_DB = CLASS(function(cls) {
 
 			self.get = get = function(id) {
 				//REQUIRED: id
-
+				
 				return cls.get({
 					dbName : dbName,
 					id : id
 				});
-			};
-			
-			self.list = list = function() {
-				return cls.list(dbName);
 			};
 
 			self.remove = remove = function(id) {
@@ -4816,6 +5088,35 @@ global.SHARED_DB = CLASS(function(cls) {
 					});
 				}
 			};
+			
+			self.list = list = function() {
+				return cls.list(dbName);
+			};
+			
+			self.count = count = function() {
+				return cls.count(dbName);
+			};
+			
+			self.clear = clear = function() {
+				
+				cls.clear(dbName);
+
+				if (CPU_CLUSTERING.broadcast !== undefined) {
+
+					CPU_CLUSTERING.broadcast({
+						methodName : '__SHARED_DB_CLEAR',
+						data : dbName
+					});
+				}
+
+				if (SERVER_CLUSTERING.broadcast !== undefined) {
+
+					SERVER_CLUSTERING.broadcast({
+						methodName : '__SHARED_DB_CLEAR',
+						data : dbName
+					});
+				}
+			};
 		}
 	};
 });
@@ -4840,22 +5141,32 @@ FOR_BOX(function(box) {
 
 			// get.
 			get,
+
+			// remove.
+			remove,
 			
 			// list.
 			list,
-
-			// remove.
-			remove;
+			
+			// count.
+			count,
+			
+			// clear.
+			clear;
 
 			self.save = save = sharedDB.save;
 
 			self.update = update = sharedDB.update;
 
 			self.get = get = sharedDB.get;
+
+			self.remove = remove = sharedDB.remove;
 			
 			self.list = list = sharedDB.list;
 
-			self.remove = remove = sharedDB.remove;
+			self.count = count = sharedDB.count;
+
+			self.clear = clear = sharedDB.clear;
 		}
 	});
 });
@@ -4878,12 +5189,18 @@ global.SHARED_STORE = CLASS(function(cls) {
 
 	// get.
 	get,
+
+	// remove.
+	remove,
 	
 	// list.
 	list,
-
-	// remove.
-	remove;
+	
+	// count.
+	count,
+	
+	// clear.
+	clear;
 
 	cls.save = save = function(params, remove) {
 		//REQUIRED: params
@@ -4951,16 +5268,6 @@ global.SHARED_STORE = CLASS(function(cls) {
 			return storage[name];
 		}
 	};
-	
-	cls.list = list = function(storeName) {
-		//REQUIRED: storeName
-		
-		var
-		// storage
-		storage = storages[storeName];
-		
-		return storage === undefined ? {} : storage;
-	};
 
 	cls.remove = remove = function(params) {
 		//REQUIRED: params
@@ -4989,6 +5296,28 @@ global.SHARED_STORE = CLASS(function(cls) {
 			delete removeDelays[name];
 		}
 	};
+	
+	cls.list = list = function(storeName) {
+		//REQUIRED: storeName
+		
+		var
+		// storage
+		storage = storages[storeName];
+		
+		return storage === undefined ? {} : storage;
+	};
+	
+	cls.count = count = function(dbName) {
+		//REQUIRED: dbName
+		
+		return COUNT_PROPERTIES(list(dbName));
+	};
+	
+	cls.clear = clear = function(storeName) {
+		//REQUIRED: storeName
+		
+		delete storages[storeName];
+	};
 
 	return {
 
@@ -5001,12 +5330,18 @@ global.SHARED_STORE = CLASS(function(cls) {
 
 			// get.
 			get,
+
+			// remove.
+			remove,
 			
 			// list.
 			list,
-
-			// remove.
-			remove;
+			
+			// count.
+			count,
+			
+			// clear.
+			clear;
 
 			self.save = save = function(params) {
 				//REQUIRED: params
@@ -5057,18 +5392,14 @@ global.SHARED_STORE = CLASS(function(cls) {
 					});
 				}
 			};
-
+			
 			self.get = get = function(name) {
 				//REQUIRED: name
-
+				
 				return cls.get({
 					storeName : storeName,
 					name : name
 				});
-			};
-			
-			self.list = list = function() {
-				return cls.list(storeName);
 			};
 
 			self.remove = remove = function(name) {
@@ -5101,6 +5432,35 @@ global.SHARED_STORE = CLASS(function(cls) {
 					});
 				}
 			};
+			
+			self.list = list = function() {
+				return cls.list(storeName);
+			};
+			
+			self.count = count = function() {
+				return cls.count(storeName);
+			};
+
+			self.clear = clear = function() {
+				
+				cls.clear(storeName);
+
+				if (CPU_CLUSTERING.broadcast !== undefined) {
+
+					CPU_CLUSTERING.broadcast({
+						methodName : '__SHARED_STORE_CLEAR',
+						data : storeName
+					});
+				}
+
+				if (SERVER_CLUSTERING.broadcast !== undefined) {
+
+					SERVER_CLUSTERING.broadcast({
+						methodName : '__SHARED_STORE_CLEAR',
+						data : storeName
+					});
+				}
+			};
 		}
 	};
 });
@@ -5122,20 +5482,30 @@ FOR_BOX(function(box) {
 
 			// get.
 			get,
+
+			// remove.
+			remove,
 			
 			// list.
 			list,
-
-			// remove.
-			remove;
+			
+			// count.
+			count,
+			
+			// clear.
+			clear;
 
 			self.save = save = sharedStore.save;
 
 			self.get = get = sharedStore.get;
-			
-			self.list = list = sharedStore.list;
 
 			self.remove = remove = sharedStore.remove;
+			
+			self.list = list = sharedStore.list;
+			
+			self.count = count = sharedStore.count;
+			
+			self.clear = clear = sharedStore.clear;
 		}
 	});
 });
@@ -5285,7 +5655,7 @@ global.CONNECT_TO_SOCKET_SERVER = METHOD({
 			send = function(params, callback) {
 				//REQUIRED: params
 				//REQUIRED: params.methodName
-				//REQUIRED: params.data
+				//OPTIONAL: params.data
 				//OPTIONAL: callback
 				
 				var
@@ -5563,18 +5933,26 @@ global.CHECK_IS_FOLDER = METHOD(function() {
 
 	return {
 
-		run : function(pathOrParams, callback) {
+		run : function(pathOrParams, callbackOrHandlers) {
 			//REQUIRED: pathOrParams
 			//REQUIRED: pathOrParams.path
 			//OPTIONAL: pathOrParams.isSync
-			//OPTIONAL: callback
+			//OPTIONAL: callbackOrHandlers
+			//OPTIONAL: callbackOrHandlers.success
+			//OPTIONAL: callbackOrHandlers.error
 
 			var
 			// path
 			path,
 
 			// is sync
-			isSync;
+			isSync,
+			
+			// callback.
+			callback,
+
+			// error handler.
+			errorHandler;
 
 			// init params.
 			if (CHECK_IS_DATA(pathOrParams) !== true) {
@@ -5582,6 +5960,15 @@ global.CHECK_IS_FOLDER = METHOD(function() {
 			} else {
 				path = pathOrParams.path;
 				isSync = pathOrParams.isSync;
+			}
+			
+			if (callbackOrHandlers !== undefined) {
+				if (CHECK_IS_DATA(callbackOrHandlers) !== true) {
+					callback = callbackOrHandlers;
+				} else {
+					callback = callbackOrHandlers.success;
+					errorHandler = callbackOrHandlers.error;
+				}
 			}
 
 			// when normal mode
@@ -6941,6 +7328,214 @@ global.REMOVE_FILE = METHOD(function() {
 });
 
 /*
+ * remove folder.
+ */
+global.REMOVE_FOLDER = METHOD(function() {
+	'use strict';
+
+	var
+	//IMPORT: fs
+	fs = require('fs');
+
+	return {
+
+		run : function(pathOrParams, callbackOrHandlers) {
+			//REQUIRED: pathOrParams
+			//REQUIRED: pathOrParams.path
+			//OPTIONAL: pathOrParams.isSync
+			//REQUIRED: callbackOrHandlers
+			//REQUIRED: callbackOrHandlers.success
+			//OPTIONAL: callbackOrHandlers.notExists
+			//OPTIONAL: callbackOrHandlers.error
+
+			var
+			// path
+			path,
+
+			// is sync
+			isSync,
+
+			// callback.
+			callback,
+
+			// not eixsts handler.
+			notExistsHandler,
+
+			// error handler.
+			errorHandler;
+
+			// init params.
+			if (CHECK_IS_DATA(pathOrParams) !== true) {
+				path = pathOrParams;
+			} else {
+				path = pathOrParams.path;
+				isSync = pathOrParams.isSync;
+			}
+
+			if (CHECK_IS_DATA(callbackOrHandlers) !== true) {
+				callback = callbackOrHandlers;
+			} else {
+				callback = callbackOrHandlers.success;
+				notExistsHandler = callbackOrHandlers.notExists;
+				errorHandler = callbackOrHandlers.error;
+			}
+
+			// when normal mode
+			if (isSync !== true) {
+
+				CHECK_IS_EXISTS_FILE(path, function(isExists) {
+
+					if (isExists === true) {
+						
+						NEXT([
+						function(next) {
+							
+							FIND_FILE_NAMES(path, function(fileNames) {
+								
+								PARALLEL(fileNames, [
+								function(fileName, done) {
+									REMOVE_FILE(path + '/' + fileName, done);
+								},
+								
+								function() {
+									next();
+								}]);
+							});
+						},
+						
+						function(next) {
+							return function() {
+								
+								FIND_FOLDER_NAMES(path, function(folderNames) {
+									
+									PARALLEL(folderNames, [
+									function(folderName, done) {
+										REMOVE_FOLDER(path + '/' + folderName, done);
+									},
+									
+									function() {
+										next();
+									}]);
+								});
+							};
+						},
+						
+						function(next) {
+							return function() {
+								
+								fs.rmdir(path, function(error) {
+		
+									var
+									// error msg
+									errorMsg;
+		
+									if (error !== TO_DELETE) {
+		
+										errorMsg = error.toString();
+		
+										if (errorHandler !== undefined) {
+											errorHandler(errorMsg);
+										} else {
+											console.log(CONSOLE_RED('[UJS-REMOVE_FOLDER] ERROR: ' + errorMsg));
+										}
+		
+									} else {
+		
+										if (callback !== undefined) {
+											callback();
+										}
+									}
+								});
+							};
+						}]);
+
+					} else {
+
+						if (notExistsHandler !== undefined) {
+							notExistsHandler(path);
+						} else {
+							console.log(CONSOLE_YELLOW('[UJS-REMOVE_FOLDER] NOT EXISTS! <' + path + '>'));
+						}
+					}
+				});
+			}
+
+			// when sync mode
+			else {
+
+				RUN(function() {
+
+					var
+					// error msg
+					errorMsg;
+
+					try {
+
+						if (CHECK_IS_EXISTS_FILE({
+							path : path,
+							isSync : true
+						}) === true) {
+							
+							FIND_FILE_NAMES({
+								path : path,
+								isSync : true
+							}, EACH(function(fileName) {
+								
+								REMOVE_FILE({
+									path : path + '/' + fileName,
+									isSync : true
+								});
+							}));
+							
+							FIND_FOLDER_NAMES({
+								path : path,
+								isSync : true
+							}, EACH(function(folderName) {
+								
+								REMOVE_FOLDER({
+									path : path + '/' + folderName,
+									isSync : true
+								});
+							}));
+							
+							fs.rmdirSync(path);
+
+						} else {
+
+							if (notExistsHandler !== undefined) {
+								notExistsHandler(path);
+							} else {
+								console.log(CONSOLE_YELLOW('[UJS-REMOVE_FOLDER] NOT EXISTS! <' + path + '>'));
+							}
+
+							// do not run callback.
+							return;
+						}
+
+					} catch(error) {
+
+						if (error !== TO_DELETE) {
+
+							errorMsg = error.toString();
+
+							if (errorHandler !== undefined) {
+								errorHandler(errorMsg);
+							} else {
+								console.log(CONSOLE_RED('[UJS-REMOVE_FOLDER] ERROR: ' + errorMsg));
+							}
+						}
+					}
+
+					if (callback !== undefined) {
+						callback();
+					}
+				});
+			}
+		}
+	};
+});
+
+/*
  * write file.
  */
 global.WRITE_FILE = METHOD(function() {
@@ -7504,83 +8099,113 @@ global.RESOURCE_SERVER = CLASS(function(cls) {
 	'use strict';
 
 	var
+	//IMPORT: fs
+	fs = require('fs'),
+	
 	//IMPORT: path
 	path = require('path'),
 
 	//IMPORT: querystring
 	querystring = require('querystring'),
+	
+	// preprocessors
+	preprocessors = {},
 
-	// get content type from uri.
-	getContentTypeFromURI;
+	// get content type from extension.
+	getContentTypeFromExtension,
+	
+	// add preprocessor.
+	addPreprocessor;
 
-	cls.getContentTypeFromURI = getContentTypeFromURI = function(uri) {
-		//REQUIRED: uri
-
-		var
-		// extname
-		extname = path.extname(uri);
-
+	cls.getContentTypeFromExtension = getContentTypeFromExtension = function(extension) {
+		//REQUIRED: ext
+		
 		// png image
-		if (extname === '.png') {
+		if (extension === 'png') {
 			return 'image/png';
 		}
 
 		// jpeg image
-		if (extname === '.jpeg' || extname === '.jpg') {
+		if (extension === 'jpeg' || extension === 'jpg') {
 			return 'image/jpeg';
 		}
 
 		// gif image
-		if (extname === '.gif') {
+		if (extension === 'gif') {
 			return 'image/gif';
 		}
 
 		// svg
-		if (extname === '.svg') {
+		if (extension === 'svg') {
 			return 'image/svg+xml';
 		}
 
 		// javascript
-		if (extname === '.js') {
+		if (extension === 'js') {
 			return 'application/javascript';
 		}
 
 		// json document
-		if (extname === '.json') {
+		if (extension === 'json') {
 			return 'application/json';
 		}
 
 		// css
-		if (extname === '.css') {
+		if (extension === 'css') {
 			return 'text/css';
 		}
 
 		// text
-		if (extname === '.text' || extname === '.txt') {
+		if (extension === 'text' || extension === 'txt') {
 			return 'text/plain';
 		}
 
 		// markdown
-		if (extname === '.markdown' || extname === '.md') {
+		if (extension === 'markdown' || extension === 'md') {
 			return 'text/x-markdown';
 		}
 
 		// html document
-		if (extname === '.html') {
+		if (extension === 'html') {
 			return 'text/html';
 		}
 
 		// swf
-		if (extname === '.swf') {
+		if (extension === 'swf') {
 			return 'application/x-shockwave-flash';
 		}
 
 		// mp3
-		if (extname === '.mp3') {
+		if (extension === 'mp3') {
 			return 'audio/mpeg';
 		}
 
+		// ogg
+		if (extension === 'ogg') {
+			return 'audio/ogg';
+		}
+
+		// mp4
+		if (extension === 'mp4') {
+			return 'video/mp4';
+		}
+
 		return 'application/octet-stream';
+	};
+	
+	cls.addPreprocessor = addPreprocessor = function(params) {
+		//REQUIRED: params
+		//REQUIRED: params.extension
+		//REQUIRED: params.preprocessor
+		
+		var
+		// extension
+		extension = params.extension,
+		
+		// preprocessor
+		preprocessor = params.preprocessor;
+		
+		preprocessors[extension] = preprocessor;
 	};
 
 	return {
@@ -7598,6 +8223,7 @@ global.RESOURCE_SERVER = CLASS(function(cls) {
 			//OPTIONAL: requestListenerOrHandlers.requestListener
 			//OPTIONAL: requestListenerOrHandlers.error
 			//OPTIONAL: requestListenerOrHandlers.notExistsResource
+			//OPTIONAL: requestListenerOrHandlers.preprocessor
 
 			var
 			//IMPORT: path
@@ -7623,15 +8249,21 @@ global.RESOURCE_SERVER = CLASS(function(cls) {
 
 			// not exists resource handler.
 			notExistsResourceHandler,
+			
+			// preprocessor.
+			preprocessor,
 
 			// resource caches
 			resourceCaches = {},
 
 			// web server
 			webServer,
-
+			
 			// get native http server.
-			getNativeHTTPServer;
+			getNativeHTTPServer,
+			
+			// get native https server.
+			getNativeHTTPSServer;
 
 			// init params.
 			if (CHECK_IS_DATA(portOrParams) !== true) {
@@ -7650,6 +8282,7 @@ global.RESOURCE_SERVER = CLASS(function(cls) {
 					requestListener = requestListenerOrHandlers.requestListener;
 					errorHandler = requestListenerOrHandlers.error;
 					notExistsResourceHandler = requestListenerOrHandlers.notExistsResource;
+					preprocessor = requestListenerOrHandlers.preprocessor;
 				}
 			}
 
@@ -7716,9 +8349,60 @@ global.RESOURCE_SERVER = CLASS(function(cls) {
 
 				function() {
 					return function() {
+						
+						// stream video.
+						if (headers.range !== undefined) {
+							
+							GET_FILE_INFO(rootPath + '/' + uri, function(fileInfo) {
 
+								var
+								// positions
+								positions = headers.range.replace(/bytes=/, '').split('-'),
+								
+								// total size
+								totalSize = fileInfo.size,
+								
+								// start position
+								startPosition = INTEGER(positions[0]),
+								
+								// end position
+								endPosition = positions[1] === undefined || positions[1] === '' ? totalSize - 1 : INTEGER(positions[1]),
+								
+								// stream
+								stream = fs.createReadStream(rootPath + '/' + uri, {
+									start : startPosition,
+									end : endPosition
+								}).on('open', function() {
+									
+									response(EXTEND({
+										origin : {
+											contentType : getContentTypeFromExtension(path.extname(uri).substring(1)),
+											totalSize : totalSize,
+											startPosition : startPosition,
+											endPosition : endPosition,
+											stream : stream
+										},
+										extend : overrideResponseInfo
+									}));
+									
+								}).on('error', function(error) {
+									
+									response(EXTEND({
+										origin : {
+											contentType : getContentTypeFromExtension(path.extname(uri).substring(1)),
+											totalSize : totalSize,
+											startPosition : startPosition,
+											endPosition : endPosition,
+											content : error.toString()
+										},
+										extend : overrideResponseInfo
+									}));
+								});
+							});
+						}
+						
 						// check ETag.
-						if (CONFIG.isDevMode !== true && (overrideResponseInfo.isFinal !== true ?
+						else if (CONFIG.isDevMode !== true && (overrideResponseInfo.isFinal !== true ?
 
 						// check version.
 						(version !== undefined && headers['if-none-match'] === version) :
@@ -7828,26 +8512,35 @@ global.RESOURCE_SERVER = CLASS(function(cls) {
 
 							function() {
 								return function(buffer, contentType) {
-
-									if (contentType === undefined) {
-										contentType = getContentTypeFromURI(uri);
+									
+									var
+									// extension
+									extension = path.extname(uri).substring(1);
+									
+									if (preprocessors[extension] !== undefined) {
+										preprocessors[extension](buffer.toString(), response);
+									} else {
+										
+										if (contentType === undefined) {
+											contentType = getContentTypeFromExtension(extension);
+										}
+	
+										if (CONFIG.isDevMode !== true && overrideResponseInfo.isFinal !== true && resourceCaches[originalURI] === undefined) {
+											resourceCaches[originalURI] = {
+												buffer : buffer,
+												contentType : contentType
+											};
+										}
+	
+										response(EXTEND({
+											origin : {
+												buffer : buffer,
+												contentType : contentType,
+												version : version
+											},
+											extend : overrideResponseInfo
+										}));
 									}
-
-									if (CONFIG.isDevMode !== true && overrideResponseInfo.isFinal !== true && resourceCaches[originalURI] === undefined) {
-										resourceCaches[originalURI] = {
-											buffer : buffer,
-											contentType : contentType
-										};
-									}
-
-									response(EXTEND({
-										origin : {
-											buffer : buffer,
-											contentType : contentType,
-											version : version
-										},
-										extend : overrideResponseInfo
-									}));
 								};
 							}]);
 
@@ -7867,6 +8560,10 @@ global.RESOURCE_SERVER = CLASS(function(cls) {
 
 			self.getNativeHTTPServer = getNativeHTTPServer = function() {
 				return webServer.getNativeHTTPServer();
+			};
+			
+			self.getNativeHTTPSServer = getNativeHTTPSServer = function() {
+				return webServer.getNativeHTTPSServer();
 			};
 		}
 	};
@@ -7898,6 +8595,9 @@ global.SOCKET_SERVER = METHOD({
 
 			// received string
 			receivedStr = '',
+			
+			// client info
+			clientInfo,
 
 			// on.
 			on,
@@ -8000,8 +8700,11 @@ global.SOCKET_SERVER = METHOD({
 			connectionListener(
 
 			// client info
-			{
-				ip : conn.remoteAddress
+			clientInfo = {
+				
+				ip : conn.remoteAddress,
+				
+				connectTime : new Date()
 			},
 
 			// on.
@@ -8077,6 +8780,8 @@ global.SOCKET_SERVER = METHOD({
 				}
 
 				sendKey += 1;
+				
+				clientInfo.lastReceiveTime = new Date();
 			},
 
 			// disconnect.
@@ -8175,6 +8880,12 @@ global.WEB_SERVER = CLASS(function(cls) {
 	var
 	//IMPORT: http
 	http = require('http'),
+	
+	//IMPORT: https
+	https = require('https'),
+	
+	//IMPORT: fs
+	fs = require('fs'),
 
 	//IMPORT: querystring
 	querystring = require('querystring'),
@@ -8266,14 +8977,20 @@ global.WEB_SERVER = CLASS(function(cls) {
 			// no parsing params uri
 			noParsingParamsURI,
 
-			// server
+			// native http server
 			nativeHTTPServer,
+
+			// native https server
+			nativeHTTPSServer,
 
 			// serve.
 			serve,
 
 			// get native http server.
-			getNativeHTTPServer;
+			getNativeHTTPServer,
+
+			// get native https server.
+			getNativeHTTPSServer;
 
 			// init params.
 			if (CHECK_IS_DATA(portOrParams) !== true) {
@@ -8286,7 +9003,7 @@ global.WEB_SERVER = CLASS(function(cls) {
 				noParsingParamsURI = portOrParams.noParsingParamsURI;
 			}
 
-			serve = function(nativeReq, nativeRes) {
+			serve = function(nativeReq, nativeRes, isSecure) {
 
 				var
 				// headers
@@ -8341,6 +9058,8 @@ global.WEB_SERVER = CLASS(function(cls) {
 						nativeReq.on('data', function(data) {
 							if (paramStr === undefined) {
 								paramStr = '';
+							} else {
+								paramStr += '&';
 							}
 							paramStr += data;
 						});
@@ -8359,6 +9078,15 @@ global.WEB_SERVER = CLASS(function(cls) {
 						params = querystring.parse(paramStr),
 						
 						// data
+						data;
+						
+						EACH(params, function(param, name) {
+							
+							if (CHECK_IS_ARRAY(param) === true) {
+								params[name] = param[param.length - 1];
+							}
+						});
+						
 						data = params.__DATA;
 						
 						if (data !== undefined) {
@@ -8371,6 +9099,8 @@ global.WEB_SERVER = CLASS(function(cls) {
 						requestListener( requestInfo = {
 
 							headers : headers,
+							
+							isSecure : isSecure,
 
 							uri : uri,
 
@@ -8395,6 +9125,10 @@ global.WEB_SERVER = CLASS(function(cls) {
 							//OPTIONAL: contentOrParams.contentType
 							//OPTIONAL: contentOrParams.content
 							//OPTIONAL: contentOrParams.buffer
+							//OPTIONAL: contentOrParams.totalSize
+							//OPTIONAL: contentOrParams.startPosition
+							//OPTIONAL: contentOrParams.endPosition
+							//OPTIONAL: contentOrParams.stream
 							//OPTIONAL: contentOrParams.encoding
 							//OPTIONAL: contentOrParams.version
 							//OPTIONAL: contentOrParams.isFinal
@@ -8414,6 +9148,18 @@ global.WEB_SERVER = CLASS(function(cls) {
 
 							// buffer
 							buffer,
+							
+							// total size
+							totalSize,
+							
+							// start position
+							startPosition,
+							
+							// end position
+							endPosition,
+							
+							// stream
+							stream,
 
 							// encoding
 							encoding,
@@ -8429,22 +9175,21 @@ global.WEB_SERVER = CLASS(function(cls) {
 								if (CHECK_IS_DATA(contentOrParams) !== true) {
 									content = contentOrParams;
 								} else {
+									
 									statusCode = contentOrParams.statusCode;
 									headers = contentOrParams.headers;
 									contentType = contentOrParams.contentType;
 									content = contentOrParams.content;
 									buffer = contentOrParams.buffer;
+									
+									totalSize = contentOrParams.totalSize;
+									startPosition = contentOrParams.startPosition;
+									endPosition = contentOrParams.endPosition;
+									stream = contentOrParams.stream;
+									
 									encoding = contentOrParams.encoding;
 									version = contentOrParams.version;
 									isFinal = contentOrParams.isFinal;
-								}
-								
-								if (content === undefined) {
-									content = '';
-								}
-
-								if (statusCode === undefined) {
-									statusCode = 200;
 								}
 
 								if (headers === undefined) {
@@ -8460,29 +9205,51 @@ global.WEB_SERVER = CLASS(function(cls) {
 									headers['Content-Type'] = contentType + '; charset=' + encoding;
 								}
 
-								if (CONFIG.isDevMode !== true) {
-									if (isFinal === true) {
-										headers['ETag'] = 'FINAL';
-									} else if (version !== undefined) {
-										headers['ETag'] = version;
-									}
+								if (stream !== undefined) {
+									
+									headers['Content-Range'] = 'bytes ' + startPosition + '-' + endPosition + '/' + totalSize;
+									headers['Accept-Ranges'] = 'bytes';
+									headers['Content-Length'] = endPosition - startPosition + 1;
+									
+									nativeRes.writeHead(206, headers);
+									
+									stream.pipe(nativeRes);
 								}
 								
-								// when gzip encoding
-								if (acceptEncoding.match(/\bgzip\b/) !== TO_DELETE) {
-
-									headers['Content-Encoding'] = 'gzip';
-
-									zlib.gzip(buffer !== undefined ? buffer : String(content), function(error, buffer) {
-										nativeRes.writeHead(statusCode, headers);
-										nativeRes.end(buffer, encoding);
-									});
-								}
-
-								// when not encoding
 								else {
-									nativeRes.writeHead(statusCode, headers);
-									nativeRes.end(buffer !== undefined ? buffer : String(content), encoding);
+									
+									if (content === undefined) {
+										content = '';
+									}
+									
+									if (statusCode === undefined) {
+										statusCode = 200;
+									}
+									
+									if (CONFIG.isDevMode !== true) {
+										if (isFinal === true) {
+											headers['ETag'] = 'FINAL';
+										} else if (version !== undefined) {
+											headers['ETag'] = version;
+										}
+									}
+									
+									// when gzip encoding
+									if (acceptEncoding.match(/\bgzip\b/) !== TO_DELETE) {
+	
+										headers['Content-Encoding'] = 'gzip';
+	
+										zlib.gzip(buffer !== undefined ? buffer : String(content), function(error, buffer) {
+											nativeRes.writeHead(statusCode, headers);
+											nativeRes.end(buffer, encoding);
+										});
+									}
+	
+									// when not encoding
+									else {
+										nativeRes.writeHead(statusCode, headers);
+										nativeRes.end(buffer !== undefined ? buffer : String(content), encoding);
+									}
 								}
 
 								requestInfo.isResponsed = true;
@@ -8511,22 +9278,30 @@ global.WEB_SERVER = CLASS(function(cls) {
 
 			// init sever.
 			if (port !== undefined) {
-				nativeHTTPServer = http.createServer(serve).listen(port);
+				nativeHTTPServer = http.createServer(function(nativeReq, nativeRes) {
+					serve(nativeReq, nativeRes, false)
+				}).listen(port);
 			}
 
 			// init secured sever.
 			if (securedPort !== undefined) {
 
-				nativeHTTPServer = https.createServer({
+				nativeHTTPSServer = https.createServer({
 					key : fs.readFileSync(securedKeyFilePath),
 					cert : fs.readFileSync(securedCertFilePath)
-				}, serve).listen(securedPort);
+				}, function(nativeReq, nativeRes) {
+					serve(nativeReq, nativeRes, true)
+				}).listen(securedPort);
 			}
 
 			console.log('[UJS-WEB_SERVER] RUNNING WEB SERVER...' + (port === undefined ? '' : (' (PORT:' + port + ')')) + (securedPort === undefined ? '' : (' (SECURED PORT:' + securedPort + ')')));
 
 			self.getNativeHTTPServer = getNativeHTTPServer = function() {
 				return nativeHTTPServer;
+			};
+			
+			self.getNativeHTTPSServer = getNativeHTTPSServer = function() {
+				return nativeHTTPSServer;
 			};
 		}
 	};
@@ -8592,4 +9367,75 @@ global.CREATE_COOKIE_STR_ARRAY = CREATE_COOKIE_STR_ARRAY = METHOD({
 
 		return strs;
 	}
+});
+
+/**
+ * get cpu usages.
+ */
+global.CPU_USAGES = METHOD(function(m) {
+	
+	var
+	//IMPORT: os
+	os = require('os');
+	
+	return {
+		
+		run : function() {
+			'use strict';
+			
+			var
+			// cpu infos
+			cpuInfos = os.cpus(),
+			
+			// usages
+			usages = [];
+			
+			EACH(cpuInfos, function(cpuInfo) {
+				
+				var
+				// total
+				total = 0,
+				
+				// idle time
+				idleTime;
+				
+				EACH(cpuInfo.times, function(time, type) {
+					total += time;
+					if (type === 'idle') {
+						idleTime = time;
+					}
+				});
+				
+				usages.push((1 - idleTime / total) * 100);
+			});
+			
+			return usages;
+		}
+	};
+});
+
+/**
+ * get memory usage.
+ */
+global.MEMORY_USAGE = METHOD(function(m) {
+	
+	var
+	//IMPORT: os
+	os = require('os'),
+	
+	// total memory
+	totalMemory = os.totalmem();
+	
+	return {
+		
+		run : function() {
+			'use strict';
+			
+			var
+			// free memory
+			freeMemory = os.freemem();
+			
+			return (1 - freeMemory / totalMemory) * 100;
+		}
+	};
 });
